@@ -29,6 +29,7 @@
 #include "packhead.h"
 #include "filter.h" // for ft->unfilter()
 #include "packer.h" // for Packer::isValidFormat
+#include "repair.h"
 
 /*************************************************************************
 // PackHeader
@@ -43,6 +44,10 @@ void PackHeader::reset() noexcept {
     mem_clear(this);
     version = -1;
     format = -1;
+    buf_file_start = ~0u;
+    header_file_offset = ~0u;
+    reconstructed_pos = -1;
+    repair_alt_count = 0;
     compress_result.reset();
 }
 
@@ -188,15 +193,9 @@ void PackHeader::putPackHeader(SPAN_S(byte) p) const {
 //
 **************************************************************************/
 
-bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
-    int boff = find_le32(raw_bytes(buf, blen), blen, UPX_MAGIC_LE32);
-    if (boff < 0)
-        return false;
-    blen -= boff; // bytes remaining in buf
+void PackHeader::decodeStrictAt(SPAN_S(const byte) p, int blen) {
     if (blen < 20)
         throwCantUnpack("header corrupted 1");
-
-    SPAN_S_VAR(const byte, const p, buf + boff);
 
     version = p[4];
     format = p[5];
@@ -288,8 +287,305 @@ bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
     //
     // success
     //
+}
 
-    this->buf_offset = boff;
+/*************************************************************************
+// tolerant recovery for deformed / header-damaged UPX shells
+**************************************************************************/
+
+// Canonicalness score for a decoded hypothesis; lower is better.
+static int repair_penalty(const PackHeader &t, const byte *raw,
+                          const upx_repair::HeaderCandidate &c, bool stored_checksum_used,
+                          int variant_kind, int solved_pos) {
+    int pen = 0;
+    (void) stored_checksum_used;
+    // Prefer, in order: untouched valid header (kind 0), checksum-byte
+    // rebuild (kind 1, does not invent field values), speculative single-byte
+    // reconstruction (kind 2) which the Adler/length oracles confirm later.
+    if (variant_kind == 0)
+        pen -= 60;
+    else if (variant_kind == 1)
+        pen -= 50;
+    // modern UPX headers use versions 10..14; wild values are usually
+    // checksum-equation side effects at unrelated positions
+    if (t.version > 14)
+        pen += 400;
+    else if (t.version < 9)
+        pen += 60;
+    else if (t.version >= 13 && t.version <= 14)
+        pen -= 8;
+    // for version >= 10 the high nibble of the level byte is reserved/junk
+    if (t.version >= 10 && raw) {
+        const int junk_bits = raw[7] & 0x70;
+        pen += junk_bits * 2;
+    }
+    if (t.filter != 0 && !Filter::isValidFilter(t.filter))
+        pen += 120;
+    if (t.u_len < t.u_file_size)
+        pen += 20;
+    if (t.c_len > t.u_len)
+        pen += 25;
+    if (t.u_len > 0x40000000u || t.c_len > 0x40000000u)
+        pen += 200;
+    // Opaque high entropy fields: prefer not to "guess" replacement values
+    // here; the Adler oracle in ph_decompress confirms the right hypothesis.
+    if (variant_kind == 2 && solved_pos >= 8 && solved_pos <= 15)
+        pen += 30;
+    if (variant_kind == 2 && (solved_pos == 29 || solved_pos == 30))
+        pen += 30;
+    // prefer the highest ranked fuzzy location
+    pen += (200 - c.score) / 4;
+    return pen;
+}
+
+bool PackHeader::loadRepairAlt(int idx) {
+    if (idx < 0 || idx >= repair_alt_count)
+        return false;
+    byte saved_raw[REPAIR_MAX_ALT][32];
+    int saved_size[REPAIR_MAX_ALT];
+    const int saved_count = repair_alt_count;
+    memcpy(saved_raw, repair_alt_raw, sizeof(saved_raw));
+    memcpy(saved_size, repair_alt_size, sizeof(saved_size));
+
+    const unsigned save_boff = buf_offset;
+    const unsigned save_start = buf_file_start;
+    const unsigned save_abs = header_file_offset;
+    const bool save_recovery = recovery_used;
+    const unsigned save_saved_u = saved_u_adler;
+    const unsigned save_saved_c = saved_c_adler;
+
+    byte target[32];
+    const int target_size = saved_size[idx];
+    memcpy(target, saved_raw[idx], target_size);
+
+    reset();
+    saved_u_adler = save_saved_u ? save_saved_u : upx_adler32(nullptr, 0);
+    saved_c_adler = save_saved_c ? save_saved_c : upx_adler32(nullptr, 0);
+    try {
+        decodeStrictAt(SPAN_S_MAKE(const byte, target, target_size), target_size);
+    } catch (const Throwable &) {
+        return false;
+    }
+    buf_offset = save_boff;
+    buf_file_start = save_start;
+    header_file_offset = save_abs;
+    memcpy(repair_alt_raw, saved_raw, sizeof(saved_raw));
+    memcpy(repair_alt_size, saved_size, sizeof(saved_size));
+    repair_alt_count = saved_count;
+    recovery_used = save_recovery;
+    return true;
+}
+
+bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf_span, int blen) {
+    const byte *buf = raw_bytes(buf_span, blen);
+    auto &diag = upx_repair::diag();
+    const bool tolerant = (!opt || opt->repair_enabled);
+    // Packer initializes the chained-Adler seed before probing; reset() in
+    // the recovery path must not lose it.
+    const unsigned keep_saved_u = saved_u_adler ? saved_u_adler : upx_adler32(nullptr, 0);
+    const unsigned keep_saved_c = saved_c_adler ? saved_c_adler : upx_adler32(nullptr, 0);
+
+    // ---- pass 1: exact "UPX!" magic, original strict decoder ----
+    int boff = find_le32(buf, blen, UPX_MAGIC_LE32);
+    if (boff >= 0) {
+        try {
+            decodeStrictAt(SPAN_S_MAKE(const byte, buf + boff, blen - boff), blen - boff);
+            buf_offset = boff;
+            checksums_authentic = true;
+            // keep the intact header as alternate 0 for the adler oracle
+            repair_alt_count = 0;
+            if (blen - boff >= 32) {
+                repair_alt_size[0] = 32;
+                memcpy(repair_alt_raw[0], buf + boff, 32);
+                repair_alt_count = 1;
+            }
+            return true;
+        } catch (const Throwable &e) {
+            diag.add(upx_repair::DIAG_INFO, upx_repair::NO_OFFSET, "strict-reject",
+                     "exact UPX! in scan window at offset %#x rejected: %s", (unsigned) boff,
+                     e.getMsg() ? e.getMsg() : "error");
+            if (!tolerant)
+                throw;
+        }
+    } else if (!tolerant) {
+        return false;
+    }
+
+    // ---- pass 2: fuzzy / structural candidate scan ----
+    upx_repair::HeaderCandidate cands[24];
+    int nc = upx_repair::find_header_candidates(buf, blen, cands, 24);
+    diag.add(upx_repair::DIAG_INFO, upx_repair::NO_OFFSET, "candidate-scan",
+             "%d structural UPX header candidate(s) in %d-byte window", nc, blen);
+    if (nc == 0)
+        return false;
+
+    int best_penalty = INT_MAX;
+    int best_cand = -1;
+    byte best_raw[32];
+    int best_size = 0;
+    bool best_rebuilt = false;
+    int best_solved_pos = -1;
+
+    repair_alt_count = 0;
+
+    // try the ranked candidates; collect every checksum-valid hypothesis of
+    // the best candidate so decompression can use the Adler-32 oracles
+    for (int ci = 0; ci < nc; ci++) {
+        const upx_repair::HeaderCandidate &c = cands[ci];
+        const int o = c.boff;
+        const int s = c.hdr_size;
+        if (s < 20 || o + s > blen)
+            continue;
+        const byte *cp = buf + o;
+
+        struct Variant {
+            byte data[32];
+            int kind; // 0 as-is, 1 rebuild, 2 solve
+            int pos;
+        };
+        Variant vars[64];
+        int nv = 0;
+
+        // as-is
+        if (nv < 64) {
+            memcpy(vars[nv].data, cp, s);
+            vars[nv].kind = 0;
+            vars[nv].pos = -1;
+            nv++;
+        }
+        // checksum byte rebuild
+        if (nv < 64) {
+            memcpy(vars[nv].data, cp, s);
+            vars[nv].data[s - 1] = upx_repair::packheader_checksum(vars[nv].data, s);
+            vars[nv].kind = 1;
+            vars[nv].pos = s - 1;
+            nv++;
+        }
+        // checksum-equation single byte reconstruction
+        for (int pos = 4; pos < s - 1 && nv < 64; pos++) {
+            int vals[4];
+            int nval = upx_repair::solve_single_byte_values(cp, s, pos, vals, 4);
+            for (int j = 0; j < nval && nv < 64; j++) {
+                memcpy(vars[nv].data, cp, s);
+                vars[nv].data[pos] = (byte) vals[j];
+                vars[nv].kind = 2;
+                vars[nv].pos = pos;
+                nv++;
+            }
+        }
+
+        int cand_accepted = 0;
+        for (int vi = 0; vi < nv; vi++) {
+            // The header checksum helper asserts the magic constant, and a
+            // deformed magic is exactly what we repair; restore it in every
+            // hypothesis before strict decoding.
+            memcpy(vars[vi].data, "UPX!", 4);
+            PackHeader t;
+            t.reset();
+            try {
+                t.decodeStrictAt(SPAN_S_MAKE(const byte, vars[vi].data, s), s);
+            } catch (const Throwable &) {
+                continue;
+            }
+            // hard structural validation (mirrors Packer::getPackHeader)
+            if (t.version <= 0 || t.version >= 0xff)
+                continue;
+            if (t.c_len < 2 || t.u_len < 2)
+                continue;
+            if (!mem_size_valid_bytes(t.c_len) || !mem_size_valid_bytes(t.u_len))
+                continue;
+            if (!Packer::isValidCompressionMethod(t.method))
+                continue;
+
+            const bool stored_used = vars[vi].kind != 1;
+            const int solved_pos = vars[vi].kind == 2 ? vars[vi].pos : -1;
+            const int pen = repair_penalty(t, vars[vi].data, c, stored_used, vars[vi].kind,
+                                           solved_pos);
+
+            // store as alternate for the adler oracle
+            if (repair_alt_count < REPAIR_MAX_ALT && s <= 32) {
+                repair_alt_size[repair_alt_count] = s;
+                memcpy(repair_alt_raw[repair_alt_count], vars[vi].data, s);
+                repair_alt_count++;
+            }
+            cand_accepted++;
+
+            if (pen < best_penalty) {
+                best_penalty = pen;
+                best_cand = ci;
+                best_size = s;
+                best_rebuilt = vars[vi].kind == 1;
+                best_solved_pos = vars[vi].kind == 2 ? vars[vi].pos : -1;
+                memcpy(best_raw, vars[vi].data, s);
+            }
+        }
+
+        // the top-ranked candidate that yields valid hypotheses is enough to
+        // collect alternates from; but keep scanning if nothing accepted yet
+        if (cand_accepted > 0 && ci == 0)
+            break;
+    }
+
+    if (best_cand < 0) {
+        // An exact magic existed but every repair failed: leave a precise
+        // reason and let the format frontend decide how to surface it.
+        if (boff >= 0)
+            diag.add(upx_repair::DIAG_FAIL, upx_repair::NO_OFFSET, "header-unrecoverable",
+                     "found 'UPX!' at window offset %#x but none of %d structural repair"
+                     " hypotheses passed version/format/method/length checks",
+                     (unsigned) boff, nc);
+        return false;
+    }
+
+    // preserve collected alternates across reset()
+    byte saved_alts[REPAIR_MAX_ALT][32];
+    int saved_alt_sizes[REPAIR_MAX_ALT];
+    const int saved_alt_count = repair_alt_count < REPAIR_MAX_ALT ? repair_alt_count
+                                                                 : REPAIR_MAX_ALT;
+    memcpy(saved_alts, repair_alt_raw, sizeof(saved_alts));
+    memcpy(saved_alt_sizes, repair_alt_size, sizeof(saved_alt_sizes));
+
+    // commit best hypothesis
+    reset();
+    saved_u_adler = keep_saved_u;
+    saved_c_adler = keep_saved_c;
+    decodeStrictAt(SPAN_S_MAKE(const byte, best_raw, best_size), best_size);
+    buf_offset = cands[best_cand].boff;
+    recovery_used = true;
+    magic_restored = cands[best_cand].magic_dist > 0;
+    checksum_byte_rebuilt = best_rebuilt;
+    byte_reconstructed = best_solved_pos >= 0;
+    reconstructed_pos = best_solved_pos;
+    // If we rebuilt the checksum byte ourselves, header fields (including the
+    // Adler values) are only tentatively trusted; the decompression stage has
+    // the final say via the Adler oracles.
+    checksums_authentic = !best_rebuilt;
+
+    if (magic_restored)
+        diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "magic-fuzzy",
+                 "UPX magic located by fuzzy scan at window offset %#x (hamming distance %d)",
+                 (unsigned) buf_offset, cands[best_cand].magic_dist);
+    if (byte_reconstructed)
+        diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "byte-reconstructed",
+                 "header byte[%d] reconstructed via checksum equation using original stored"
+                 " checksum", reconstructed_pos);
+    if (checksum_byte_rebuilt)
+        diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "checksum-rebuilt",
+                 "header checksum byte recomputed; Adler fields treated as untrusted until"
+                 " decompression confirms them");
+    if (!magic_restored && !byte_reconstructed && !checksum_byte_rebuilt)
+        diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "fuzzy-located",
+                 "header located via structural scan at window offset %#x",
+                 (unsigned) buf_offset);
+
+    // restore alternates; make sure the chosen header is present as well
+    repair_alt_count = saved_alt_count;
+    memcpy(repair_alt_raw, saved_alts, sizeof(saved_alts));
+    memcpy(repair_alt_size, saved_alt_sizes, sizeof(saved_alt_sizes));
+    repair_alt_size[0] = best_size;
+    memcpy(repair_alt_raw[0], best_raw, best_size);
+    if (repair_alt_count <= 0)
+        repair_alt_count = 1;
     return true;
 }
 
@@ -326,33 +622,143 @@ bool ph_skipVerify(const PackHeader &ph) noexcept {
 // ph decompress util
 **************************************************************************/
 
+// Find a stored header hypothesis whose Adler field matches the computed
+// checksum and whose decompression parameters are compatible with the buffers
+// already allocated by the caller.
+static int repair_find_alt_by_adler(const PackHeader &ph, bool compressed_side,
+                                    unsigned actual_adler, bool filter_matters) {
+    for (int i = 0; i < ph.repair_alt_count; i++) {
+        PackHeader t;
+        t.reset();
+        if (ph.repair_alt_size[i] < 20)
+            continue;
+        try {
+            t.decodeStrictAt(
+                SPAN_S_MAKE(const byte, ph.repair_alt_raw[i], ph.repair_alt_size[i]),
+                ph.repair_alt_size[i]);
+        } catch (const Throwable &) {
+            continue;
+        }
+        if (compressed_side ? (t.c_adler != actual_adler) : (t.u_adler != actual_adler))
+            continue;
+        if (t.method != ph.method || t.u_len != ph.u_len || t.c_len != ph.c_len)
+            continue;
+        if (filter_matters && (t.filter != ph.filter || t.filter_cto != ph.filter_cto))
+            continue;
+        return i;
+    }
+    return -1;
+}
+
 void ph_decompress(PackHeader &ph, SPAN_P(const byte) in, SPAN_P(byte) out, bool verify_checksum,
                    Filter *ft) {
+    auto &diag = upx_repair::diag();
+    const bool tolerant = (!opt || opt->repair_enabled);
+    bool checksum_gate = verify_checksum;
+
     // verify checksum of compressed data
     if (verify_checksum) {
         unsigned adler = upx_adler32(raw_bytes(in, ph.c_len), ph.c_len, ph.saved_c_adler);
-        if (adler != ph.c_adler)
-            throwChecksumError();
+        if (adler != ph.c_adler) {
+            diag.add(upx_repair::DIAG_INFO, upx_repair::NO_OFFSET, "c-adler-mismatch",
+                     "header c_adler=%08x computed=%08x over %u bytes", ph.c_adler, adler,
+                     ph.c_len);
+            int ai = tolerant ? repair_find_alt_by_adler(ph, true, adler, ft != nullptr) : -1;
+            if (ai >= 0 && ph.loadRepairAlt(ai)) {
+                diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "alt-cadler",
+                         "selected reconstructed header hypothesis #%d whose c_adler matches the"
+                         " compressed stream",
+                         ai);
+            } else if (tolerant && ph.recovery_used) {
+                diag.add(upx_repair::DIAG_WARN, upx_repair::NO_OFFSET, "cadler-unverified",
+                         "c_adler mismatch (%08x != header %08x) and no header hypothesis matches;"
+                         " treating Adler fields as damaged, continuing without checksum gate",
+                         adler, ph.c_adler);
+                checksum_gate = false;
+            } else {
+                throwCantUnpack("compressed-stream checksum mismatch: header c_adler=%08x but"
+                                " computed %08x over %u compressed bytes -- the compressed data"
+                                " is corrupted or truncated (not just a damaged header)",
+                                ph.c_adler, adler, ph.c_len);
+            }
+        }
     }
 
     // decompress
     if (ph.u_len < ph.c_len)
-        throwCantUnpack("header corrupted");
+        throwCantUnpack("header corrupted: u_len=%u is smaller than c_len=%u", ph.u_len,
+                        ph.c_len);
     unsigned new_len = ph.u_len;
     int r = upx_decompress(raw_bytes(in, ph.c_len), ph.c_len, raw_bytes(out, ph.u_len), &new_len,
                            ph_forced_method(ph.method), &ph.compress_result);
     if (r == UPX_E_OUT_OF_MEMORY)
         throwOutOfMemoryException();
-    if (r != UPX_E_OK || new_len != ph.u_len)
-        throwCompressedDataViolation();
+    if (r == UPX_E_OK && new_len != ph.u_len && tolerant && ph.recovery_used) {
+        // a corrupted u_len header byte may have selected the wrong primary
+        // hypothesis; let the actual decoded length choose an alternate
+        int li = -1;
+        for (int i = 0; i < ph.repair_alt_count && li < 0; i++) {
+            PackHeader t;
+            t.reset();
+            try {
+                t.decodeStrictAt(
+                    SPAN_S_MAKE(const byte, ph.repair_alt_raw[i], ph.repair_alt_size[i]),
+                    ph.repair_alt_size[i]);
+            } catch (const Throwable &) {
+                continue;
+            }
+            if (t.u_len == new_len && t.c_len == ph.c_len && t.method == ph.method)
+                li = i;
+        }
+        if (li >= 0 && ph.loadRepairAlt(li)) {
+            diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "alt-ulen",
+                     "corrected u_len to %u using actual decompressed length via hypothesis #%d",
+                     new_len, li);
+        } else {
+            throwCantUnpack("header u_len=%u does not match decompressed length %u and no header"
+                            " hypothesis resolves it",
+                            ph.u_len, new_len);
+        }
+    } else if (r != UPX_E_OK || new_len != ph.u_len) {
+        throwCantUnpack("decompression failed: method=%d errcode=%d decoded_length=%u expected=%u"
+                        " -- compressed stream is corrupt or truncated",
+                        ph_forced_method(ph.method), r, new_len, ph.u_len);
+    }
 
     // verify checksum of decompressed data
     if (verify_checksum) {
         if (ft)
             ft->unfilter(out, ph.u_len);
         unsigned adler = upx_adler32(raw_bytes(out, ph.u_len), ph.u_len, ph.saved_u_adler);
-        if (adler != ph.u_adler)
-            throwChecksumError();
+        if (checksum_gate && adler != ph.u_adler) {
+            diag.add(upx_repair::DIAG_INFO, upx_repair::NO_OFFSET, "u-adler-mismatch",
+                     "header u_adler=%08x computed=%08x over %u bytes", ph.u_adler, adler,
+                     ph.u_len);
+            int ai = tolerant ? repair_find_alt_by_adler(ph, false, adler, ft != nullptr) : -1;
+            if (ai >= 0 && ph.loadRepairAlt(ai)) {
+                diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "alt-uadler",
+                         "selected reconstructed header hypothesis #%d whose u_adler matches the"
+                         " decompressed data",
+                         ai);
+            } else if (tolerant && ph.recovery_used) {
+                diag.add(upx_repair::DIAG_WARN, upx_repair::NO_OFFSET, "uadler-unverified",
+                         "u_adler mismatch (%08x != header %08x); decompression itself succeeded"
+                         " but output integrity cannot be proven",
+                         adler, ph.u_adler);
+            } else {
+                throwCantUnpack("decompressed-data checksum mismatch: header u_adler=%08x but"
+                                " computed %08x over %u bytes -- decompressed content is corrupt"
+                                " or the header checksum field was tampered",
+                                ph.u_adler, adler, ph.u_len);
+            }
+        } else if (!checksum_gate) {
+            // we intentionally ran without the Adler gate; still try to
+            // upgrade the result by finding a matching header hypothesis
+            int ai = tolerant ? repair_find_alt_by_adler(ph, false, adler, ft != nullptr) : -1;
+            if (ai >= 0 && ph.loadRepairAlt(ai))
+                diag.add(upx_repair::DIAG_REPAIRED, upx_repair::NO_OFFSET, "alt-uadler-late",
+                         "unverified recovery confirmed by u_adler via header hypothesis #%d", ai);
+        }
     }
 }
 

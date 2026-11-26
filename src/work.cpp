@@ -45,6 +45,7 @@
 #include "packmast.h"
 #include "ui.h"
 #include "util/membuffer.h"
+#include "repair.h"
 
 #if USE_UTIMENSAT && defined(AT_FDCWD)
 #elif defined(_WIN32) || defined(__CYGWIN__)
@@ -207,6 +208,7 @@ static noinline void copy_file_attributes(const XStat *xst, const char *oname, b
 
 void do_one_file(const char *const iname, char *const oname) may_throw {
     oname[0] = 0; // make empty
+    upx_repair::reset_for_file(iname);
 
     // check iname stat
     XStat xst = {};
@@ -254,6 +256,8 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
             skip = false;
         else if (opt->backup)
             skip = false;
+        else if (opt->cmd == CMD_DIAGNOSE)
+            skip = false; // read-only diagnosis must work on read-only files
         if (skip)
             throwIOException("file is write protected -- skipped");
     }
@@ -347,6 +351,13 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
             pm.list();
         else if (opt->cmd == CMD_FILEINFO)
             pm.fileInfo();
+        else if (opt->cmd == CMD_DIAGNOSE) {
+            const int drc = upx_repair::diagnose_path(iname);
+            if (drc == 2)
+                main_set_exit_code(EXIT_WARN);
+            else if (drc != 0)
+                main_set_exit_code(EXIT_ERROR);
+        }
         else
             throwInternalError("invalid command");
     }
@@ -430,10 +441,14 @@ int do_files(int i, int argc, char *argv[]) may_throw {
 
         try {
             do_one_file(iname, oname);
+            upx_repair::emit_repair_notes(iname);
         } catch (const Exception &e) {
             unlink_ofile(oname);
             if (opt->verbose >= 1 || (opt->verbose >= 0 && !e.isWarning()))
                 printErr(iname, e);
+            const bool generic_not_packed =
+                dynamic_cast<const NotPackedException *>(std::addressof(e)) != nullptr;
+            upx_repair::emit_failure_trail(iname, generic_not_packed);
             main_set_exit_code(e.isWarning() ? EXIT_WARN : EXIT_ERROR);
             // this is not fatal, continue processing more files
         } catch (const Error &e) {
@@ -482,6 +497,8 @@ int do_files(int i, int argc, char *argv[]) may_throw {
         UiPacker::uiListTotal();
     else if (opt->cmd == CMD_FILEINFO)
         UiPacker::uiFileInfoTotal();
+    else if (opt->cmd == CMD_DIAGNOSE)
+        ; // diagnosis already printed per file, no totals line
     else
         throwInternalError("invalid command");
     return 0;

@@ -1,0 +1,17 @@
+{
+  "root": "/home/dev/feedback/uid38857",
+  "B": "/home/dev/feedback/uid38857",
+  "sha": "75c1f8621dd913e8997c7990d31391e10ae9b633",
+  "wslDistro": "Ubuntu-26.04",
+  "source": {
+    "owner": "upx",
+    "repo": "upx",
+    "sha": "75c1f8621dd913e8997c7990d31391e10ae9b633"
+  },
+  "fork": {
+    "owner": "Rrr119",
+    "repo": "upx",
+    "cloneUrl": "https://github.com/Rrr119/upx.git"
+  },
+  "at": "2026-11-26T00:12:00.673Z"
+}

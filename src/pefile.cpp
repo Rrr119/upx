@@ -31,6 +31,7 @@
 #include "packer.h"
 #include "pefile.h"
 #include "linker.h"
+#include "repair.h"
 
 #define FILLVAL 0
 
@@ -3243,7 +3244,10 @@ void PeFile::unpack0(OutputFile *fo, const ht &ih, ht &oh, ord_mask_t ord_mask, 
 
     ibuf.alloc(ph.c_len);
     obuf.allocForDecompression(ph.u_len);
-    fi->seek(isection[1].rawdataptr - 64 + ph.buf_offset + ph.getPackHeaderSize(), SEEK_SET);
+    upx_off_t header_abs = (ph.header_file_offset != ~0u)
+                               ? (upx_off_t) ph.header_file_offset
+                               : (upx_off_t) isection[1].rawdataptr - 64 + ph.buf_offset;
+    fi->seek(header_abs + ph.getPackHeaderSize(), SEEK_SET);
     fi->readx(ibuf, ibufgood = ph.c_len);
 
     // decompress
@@ -3413,7 +3417,20 @@ int PeFile::canUnpack0(unsigned max_sections, unsigned objs, unsigned ih_entry, 
     fi->readx(isection, sizeof(pe_section_t) * objs);
     bool is_packed = (objs <= max_sections && (IDSIZE(15) || ih_entry > isection[1].vaddr));
     bool found_ph = false;
-    if (memcmp(isection[0].name, "UPX", 3) == 0) {
+    bool sec0_is_upx = (memcmp(isection[0].name, "UPX", 3) == 0);
+    char header_fail_reason[320] = {};
+    auto note_header_exc = [&](const Throwable &e, const char *where) {
+        snprintf(header_fail_reason, sizeof(header_fail_reason),
+                 "UPX shell header at %s could not be recovered: %s", where,
+                 e.getMsg() ? e.getMsg() : "unknown error");
+        // only treat this as a deformed-shell failure when the PE itself has
+        // independent UPX packing evidence; otherwise it is scan noise on an
+        // ordinary executable
+        if (is_packed)
+            upx_repair::diag().add(upx_repair::DIAG_FAIL, upx_repair::NO_OFFSET,
+                                   "pe-header-fail", "%s", header_fail_reason);
+    };
+    if (sec0_is_upx) {
         // current version
         fi->seek(isection[1].rawdataptr - 64, SEEK_SET);
         found_ph = readPackHeader(1024);
@@ -3422,11 +3439,46 @@ int PeFile::canUnpack0(unsigned max_sections, unsigned objs, unsigned ih_entry, 
             fi->seek(isection[2].rawdataptr, SEEK_SET);
             found_ph = readPackHeader(1024);
         }
+    } else if (opt->repair_enabled) {
+        // Deformed shell: section names were renamed/wiped. The PE table
+        // still tells us the canonical header locations, so try them with
+        // tolerant decoding before falling back to a whole-file fuzzy scan.
+        try {
+            fi->seek(isection[1].rawdataptr - 64, SEEK_SET);
+            found_ph = readPackHeader(1024);
+        } catch (const Throwable &e) {
+            note_header_exc(e, "isection[1].rawdataptr-64");
+        }
+        if (!found_ph) {
+            try {
+                fi->seek(isection[2].rawdataptr, SEEK_SET);
+                found_ph = readPackHeader(1024);
+            } catch (const Throwable &e) {
+                note_header_exc(e, "isection[2].rawdataptr");
+            }
+        }
+        if (!found_ph) {
+            try {
+                found_ph = scanPackHeaderRepair();
+            } catch (const Throwable &e) {
+                note_header_exc(e, "whole-file fuzzy scan");
+            }
+        }
     }
     if (is_packed && found_ph)
         return true;
+    // tolerant recovery produced a format/version-valid pack header even if
+    // the rigid section-count/entry heuristic disagrees (renamed or extra
+    // sections); that header is definitive evidence of a UPX shell
+    if (found_ph && opt->repair_enabled)
+        return true;
     if (!is_packed && !found_ph)
         return -1;
+    // Only surface a speculative fuzzy-scan failure as a specific deformed
+    // header error when the PE independently looks UPX-packed; otherwise
+    // preserve the legacy "not our kind of file" behaviour.
+    if (is_packed && header_fail_reason[0])
+        throwCantUnpack("%s", header_fail_reason);
     if (is_packed && ih_entry < isection[2].vaddr) {
         byte buf[256];
         bool x = false;

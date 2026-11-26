@@ -180,6 +180,9 @@ protected:
     virtual int patchPackHeader(void *b, int blen) final;
     virtual bool getPackHeader(const void *b, int blen, bool allow_incompressible = false) final;
     virtual bool readPackHeader(int len, bool allow_incompressible = false) final;
+    // whole-file chunked fuzzy scan used when the standard header locations
+    // have been deformed; sets ph absolute placement on success
+    bool scanPackHeaderRepair();
     virtual void checkAlreadyPacked(const void *b, int blen) final;
 
     // loader core

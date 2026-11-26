@@ -1,0 +1,2 @@
+upx: deform/samples/12_uadler_byte.exe: recovery [checksum-rebuilt]: header checksum byte recomputed; Adler fields treated as untrusted until decompression confirms them
+upx: deform/samples/12_uadler_byte.exe: recovery [alt-uadler]: selected reconstructed header hypothesis #5 whose u_adler matches the decompressed data

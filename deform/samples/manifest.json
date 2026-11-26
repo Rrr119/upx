@@ -1,0 +1,169 @@
+{
+  "base_packed": "deform/base/base_cmd.upx.exe",
+  "base_sha256": "f7bdb777d1ed29365b678c2310542bac9a948bfc3aaaaac714340725d111b162",
+  "header_offset": 992,
+  "expected_unpacked_sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+  "sample_count": 20,
+  "samples": [
+    {
+      "id": "01",
+      "file": "deform/samples/01_magic_bitflip.exe",
+      "mutation": "magic_bitflip",
+      "category": "magic",
+      "description": "one bit flipped in UPX! last byte",
+      "sha256": "932d404739987b85113a1d46ed0848c6d461506c4c418d7555a7b7fa76083c66"
+    },
+    {
+      "id": "02",
+      "file": "deform/samples/02_magic_lowercase.exe",
+      "mutation": "magic_lowercase",
+      "category": "magic",
+      "description": "UPX! XOR 0x20 -> upx!",
+      "sha256": "6fa35ec0c7118cd0abb7dd687e14a3858209111146ecfa8a6bbab2e8c916a708"
+    },
+    {
+      "id": "03",
+      "file": "deform/samples/03_magic_zeroed.exe",
+      "mutation": "magic_zeroed",
+      "category": "magic",
+      "description": "all four magic bytes zeroed",
+      "sha256": "e5326dd900a544003d7c19c380dcc9162a02f30f1c74a9a2ea7893c63df1f4c2"
+    },
+    {
+      "id": "04",
+      "file": "deform/samples/04_magic_replaced.exe",
+      "mutation": "magic_replaced",
+      "category": "magic",
+      "description": "magic replaced with YTS!",
+      "sha256": "e7117a2bc0a3c10cf576ca7f541084125b048b1d7aee6549cd7c5464f2b09a3d"
+    },
+    {
+      "id": "05",
+      "file": "deform/samples/05_magic_xor_encoded.exe",
+      "mutation": "magic_xor_encoded",
+      "category": "magic",
+      "description": "magic XOR-encoded with key 0x5A",
+      "sha256": "f6f65998f5f3904c77c30db4296c48683493161158a96469e9e3d222e9c9785c"
+    },
+    {
+      "id": "06",
+      "file": "deform/samples/06_hdr_checksum_zero.exe",
+      "mutation": "hdr_checksum_zero",
+      "category": "header-checksum",
+      "description": "header checksum byte set to 0",
+      "sha256": "0e3074ae10f1c08f40846ef66b7ad787eb3ea5646e1efadbbb76339b1221ad83"
+    },
+    {
+      "id": "07",
+      "file": "deform/samples/07_hdr_checksum_ff.exe",
+      "mutation": "hdr_checksum_ff",
+      "category": "header-checksum",
+      "description": "header checksum byte set to 0xFF",
+      "sha256": "86964a4c3dad499a90812bee02d2a345602ea8bc77f65cdcccb06fe0f8e93976"
+    },
+    {
+      "id": "08",
+      "file": "deform/samples/08_level_junk_bit.exe",
+      "mutation": "level_junk_bit",
+      "category": "header-field",
+      "description": "ignored level bit set; stale checksum",
+      "sha256": "9bc4771d80a96900771077e7118744f24322f2684a2e3e9a80c1aa9f2972d07a"
+    },
+    {
+      "id": "09",
+      "file": "deform/samples/09_version_poke.exe",
+      "mutation": "version_poke",
+      "category": "header-field",
+      "description": "version byte 13 -> 12; stale checksum",
+      "sha256": "79e8c5116e29878c1d594a54af85f73ddbf65153f3c2bb317843410f1e00f0e5"
+    },
+    {
+      "id": "10",
+      "file": "deform/samples/10_format_poke.exe",
+      "mutation": "format_poke",
+      "category": "header-field",
+      "description": "format byte -> 42 invalid; stale checksum",
+      "sha256": "102aaaf951f14a512d1b92cab291b1225bd335fdb7a971892ef7d5033e0e9baf"
+    },
+    {
+      "id": "11",
+      "file": "deform/samples/11_method_poke.exe",
+      "mutation": "method_poke",
+      "category": "header-field",
+      "description": "method byte -> 0xFF invalid; stale checksum",
+      "sha256": "1eb4b5711d22e653e0159b9efb7e8f908eeccec4614937ed9ea5b22781ae2e04"
+    },
+    {
+      "id": "12",
+      "file": "deform/samples/12_uadler_byte.exe",
+      "mutation": "uadler_byte",
+      "category": "header-field",
+      "description": "u_adler corrupted; stale checksum",
+      "sha256": "46b0ff57dec37fb1ad6eaae6170e85d109aa8030ff7eaab808768d2bdf068633"
+    },
+    {
+      "id": "13",
+      "file": "deform/samples/13_cadler_byte.exe",
+      "mutation": "cadler_byte",
+      "category": "header-field",
+      "description": "c_adler corrupted; stale checksum",
+      "sha256": "9e72000eab920624f9f5682532f17dd7d951d79b29b27f6b161636e65c7274f4"
+    },
+    {
+      "id": "14",
+      "file": "deform/samples/14_ulen_byte.exe",
+      "mutation": "ulen_byte",
+      "category": "header-field",
+      "description": "u_len byte corrupted; stale checksum",
+      "sha256": "14beb965b6d2864be492537cee98f5b72f6374d8bec13583dd6902dbfe691bab"
+    },
+    {
+      "id": "15",
+      "file": "deform/samples/15_both_adlers_multibyte.exe",
+      "mutation": "both_adlers_multibyte",
+      "category": "header-field",
+      "description": "two Adler fields damaged; stale checksum",
+      "sha256": "bbc3918e8794854a679b12dd370df259c2fefbc00914046048ab221886aaed7a"
+    },
+    {
+      "id": "16",
+      "file": "deform/samples/16_rename_upx0.exe",
+      "mutation": "rename_upx0",
+      "category": "section-name",
+      "description": "PE section UPX0 renamed",
+      "sha256": "8b20f5024792d258c26dd7a06c71226002b09cf42c16ac449a1ca2a710d75073"
+    },
+    {
+      "id": "17",
+      "file": "deform/samples/17_rename_all_sections.exe",
+      "mutation": "rename_all_sections",
+      "category": "section-name",
+      "description": "UPX0/UPX1/.rsrc renamed",
+      "sha256": "89e4d325ebdaea879068b105e8e23ffcb3d40fae2caa165013367ebd1f9ce3e8"
+    },
+    {
+      "id": "18",
+      "file": "deform/samples/18_rename_and_magic.exe",
+      "mutation": "rename_and_magic",
+      "category": "combined",
+      "description": "sections renamed plus 2 magic bits flipped",
+      "sha256": "199b812bb3b6dba5e9049f0ee2b989c5b8cdcc9e1e2a282d856db2a686464a38"
+    },
+    {
+      "id": "19",
+      "file": "deform/samples/19_section_names_zeroed.exe",
+      "mutation": "section_names_zeroed",
+      "category": "section-name",
+      "description": "all PE section names zeroed",
+      "sha256": "06e233ac9cbe7397aec9263abecd400f97d8507a3288fbf6ef017857dcfe6795"
+    },
+    {
+      "id": "20",
+      "file": "deform/samples/20_payload_destroyed.exe",
+      "mutation": "payload_destroyed",
+      "category": "negative-control",
+      "description": "compressed stream byte flipped (unrepairable)",
+      "sha256": "1502d645f9f3e0b6dde6e9f72c7a0297866d25b04d86e4a7dfd48342d0fe98d4"
+    }
+  ]
+}

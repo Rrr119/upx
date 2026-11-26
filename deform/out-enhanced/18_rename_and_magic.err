@@ -1,0 +1,1 @@
+upx: deform/samples/18_rename_and_magic.exe: recovery [magic-fuzzy]: UPX magic located by fuzzy scan at window offset 0x20 (hamming distance 2)

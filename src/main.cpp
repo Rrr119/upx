@@ -376,6 +376,18 @@ static noinline int do_option(int optc, const char *arg) {
     case 909:
         set_cmd(CMD_FILEINFO);
         break;
+    case 911: // --diagnose
+        opt->diagnose_only = true;
+        opt->repair_enabled = true;
+        opt->repair_verbosity = 2;
+        set_cmd(CMD_DIAGNOSE);
+        break;
+    case 920: // --repair
+        opt->repair_enabled = true;
+        break;
+    case 921: // --no-repair
+        opt->repair_enabled = false;
+        break;
     case 910:
         set_cmd(CMD_SYSINFO);
         break;
@@ -824,6 +836,7 @@ int main_get_options(int argc, char **argv) {
         {"brute", 0x10, N, 901},       // compress best, brute force
         {"ultra-brute", 0x10, N, 902}, // compress best, ultra-brute force
         {"decompress", 0, N, 'd'},     // decompress
+        {"diagnose", 0, N, 911},        // diagnose deformed UPX shell / header repair report
         {"fast", 0x10, N, '1'},        // compress faster
         {"fileinfo", 0x10, N, 909},    // display info about file
         {"file-info", 0x10, N, 909},   // display info about file
@@ -850,6 +863,8 @@ int main_get_options(int argc, char **argv) {
         {"no-time", 0x10, N, 528},         // do not preserve timestamp
         {"output", 0x21, N, 'o'},
         {"quiet", 0, N, 'q'},  // quiet mode
+        {"repair", 0, N, 920},             // tolerant deformed-shell recognition/repair [default]
+        {"no-repair", 0, N, 921},          // strict legacy behaviour, no repair attempts
         {"silent", 0, N, 'q'}, // quiet mode
 #if 0
         // FIXME: to_stdout doesn't work because of console code mess
@@ -1282,6 +1297,8 @@ int upx_main(int argc, char *argv[]) may_throw {
     case CMD_LIST:
         break;
     case CMD_FILEINFO:
+        break;
+    case CMD_DIAGNOSE:
         break;
     case CMD_SYSINFO:
         show_sysinfo(OPTIONS_VAR);

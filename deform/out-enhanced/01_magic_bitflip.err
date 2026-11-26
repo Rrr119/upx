@@ -1,0 +1,1 @@
+upx: deform/samples/01_magic_bitflip.exe: recovery [magic-fuzzy]: UPX magic located by fuzzy scan at window offset 0x20 (hamming distance 1)

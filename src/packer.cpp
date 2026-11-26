@@ -31,6 +31,7 @@
 #include "filter.h"
 #include "linker.h"
 #include "ui.h"
+#include "repair.h"
 
 /*************************************************************************
 //
@@ -533,18 +534,79 @@ bool Packer::getPackHeader(const void *b, int blen, bool allow_incompressible) {
     if (!ph.decodePackHeaderFromBuf(SPAN_S_MAKE(const byte, bb, blen), blen))
         return false;
 
-    if (ph.version > getVersion())
-        throwCantUnpack("need a newer version of UPX");
-    // Some formats might be able to unpack old versions because
-    // their implementation hasn't changed. Ask them.
-    if (opt->cmd != CMD_FILEINFO)
-        if (!testUnpackVersion(ph.version))
-            return false;
+    // Validate the decoded header; if tolerant decoding stored alternate
+    // checksum-valid hypotheses, try them before giving up.
+    const bool tolerant = (!opt || opt->repair_enabled);
+    const int alt_total = ph.repair_alt_count;
+    int attempt = 0;
+    while (true) {
+        enum FailKind { FAIL_NONE, FAIL_THROW, FAIL_FALSE };
+        FailKind fail = FAIL_NONE;
+        const char *reason = nullptr;
+        char exc_msg[320] = {};
 
-    if (ph.c_len > ph.u_len || (ph.c_len == ph.u_len && !allow_incompressible) ||
-        ph.c_len >= file_size_u || ph.version <= 0 || ph.version >= 0xff)
-        throwCantUnpack("header corrupted");
-    else if (ph.u_len > ph.u_file_size) {
+        // format frontends may throw specific CantUnpack errors from their
+        // testUnpackVersion/testUnpackFormat overrides; treat those like any
+        // other rejected hypothesis and try stored alternates before failing
+        try {
+            if (ph.version > getVersion()) {
+                fail = FAIL_THROW;
+                reason = "header version newer than this UPX build supports";
+            } else if (opt->cmd != CMD_FILEINFO && !testUnpackVersion(ph.version)) {
+                fail = FAIL_FALSE; // frontend does not handle this version
+                reason = "format frontend rejects header version";
+            } else if (ph.c_len > ph.u_len || (ph.c_len == ph.u_len && !allow_incompressible) ||
+                       ph.c_len >= file_size_u || ph.version <= 0 || ph.version >= 0xff) {
+                fail = FAIL_THROW;
+                reason = "length/version consistency check failed";
+            } else if (!isValidCompressionMethod(ph.method)) {
+                fail = FAIL_THROW;
+                reason = "unknown compression method";
+            } else if (!testUnpackFormat(ph.format)) {
+                fail = FAIL_FALSE; // frontend does not handle this format
+                reason = "format frontend rejects format id";
+            }
+        } catch (const Throwable &e) {
+            fail = FAIL_THROW;
+            snprintf(exc_msg, sizeof(exc_msg), "%s", e.getMsg() ? e.getMsg() : "frontend rejected header");
+            reason = exc_msg;
+        }
+
+        if (fail == FAIL_NONE)
+            break;
+
+        upx_repair::diag().add(upx_repair::DIAG_INFO, upx_repair::NO_OFFSET, "alt-reject",
+                               "header hypothesis #%d rejected: %s (version=%d format=%d"
+                               " method=%d c_len=%u u_len=%u)",
+                               attempt, reason ? reason : "?", ph.version, ph.format, ph.method,
+                               ph.c_len, ph.u_len);
+
+        // advance to the next loadable alternate hypothesis
+        int next = attempt + 1;
+        while (next < alt_total && !ph.loadRepairAlt(next))
+            next++;
+        if (tolerant && next < alt_total) {
+            attempt = next;
+            continue;
+        }
+
+        // no usable alternate left: preserve original UPX semantics
+        if (fail == FAIL_FALSE)
+            return false;
+        if (exc_msg[0])
+            throwCantUnpack("%s", exc_msg);
+        if (ph.version > getVersion())
+            throwCantUnpack("need a newer version of UPX (header version %d > supported %d)",
+                            ph.version, getVersion());
+        if (!isValidCompressionMethod(ph.method))
+            throwCantUnpack("unknown compression method %d (try a newer version of UPX)",
+                            ph.method);
+        throwCantUnpack("header corrupted: c_len=%u u_len=%u file_size=%u version=%d (%s)",
+                        ph.c_len, ph.u_len, (unsigned) file_size_u, ph.version,
+                        reason ? reason : "validation failed");
+    }
+
+    if (ph.u_len > ph.u_file_size) {
 #if 0
         // FIXME: does this check make sense w.r.t. overlays ???
         if (ph.format == UPX_F_WIN32_PE || ph.format == UPX_F_DOS_EXE)
@@ -554,23 +616,47 @@ bool Packer::getPackHeader(const void *b, int blen, bool allow_incompressible) {
             throwCantUnpack("header size corrupted");
 #endif
     }
-    if (!isValidCompressionMethod(ph.method))
-        throwCantUnpack("unknown compression method (try a newer version of UPX)");
-
-    // Some formats might be able to unpack "subformats". Ask them.
-    if (!testUnpackFormat(ph.format))
-        return false;
 
     return true;
 }
 
 bool Packer::readPackHeader(int len, bool allow_incompressible) {
     assert(len > 0);
+    const upx_off_t start_off = fi->tell();
     MemBuffer buf(len);
     len = fi->read(buf, len);
     if (len <= 0)
         return false;
-    return getPackHeader(buf, len, allow_incompressible);
+    if (!getPackHeader(buf, len, allow_incompressible))
+        return false;
+    ph.buf_file_start = (unsigned) start_off;
+    ph.header_file_offset = (unsigned) start_off + ph.buf_offset;
+    return true;
+}
+
+bool Packer::scanPackHeaderRepair() {
+    if (!opt || !opt->repair_enabled)
+        return false;
+    constexpr int CHUNK = 1 << 20;
+    MemBuffer buf(CHUNK);
+    const upx_off_t fsize = fi->st_size();
+    const upx_off_t step = CHUNK - 64; // overlap so headers cannot be split
+    for (upx_off_t base = 0; base < fsize; base += step) {
+        fi->seek(base, SEEK_SET);
+        int rd = fi->read(buf, CHUNK);
+        if (rd <= 0)
+            break;
+        if (getPackHeader(buf, rd)) {
+            ph.buf_file_start = (unsigned) base;
+            ph.header_file_offset = (unsigned) base + ph.buf_offset;
+            upx_repair::diag().add(upx_repair::DIAG_INFO, ph.header_file_offset,
+                                   "wide-scan-hit", "header recovered from whole-file scan");
+            return true;
+        }
+        if (base + rd >= fsize)
+            break;
+    }
+    return false;
 }
 
 void Packer::checkAlreadyPacked(const void *b, int blen) {

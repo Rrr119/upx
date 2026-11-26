@@ -1,0 +1,1 @@
+upx: deform/samples/03_magic_zeroed.exe: CantUnpackException: file is modified/hacked/protected; take care!!!

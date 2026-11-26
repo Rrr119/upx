@@ -71,6 +71,32 @@ struct PackHeader final {
 
     // info fields set by decodePackHeaderFromBuf()
     unsigned buf_offset;
+    // absolute file offset of the start of the buffer passed to
+    // decodePackHeaderFromBuf(); used by tolerant scans so the format
+    // frontends can seek to the payload regardless of scan window.
+    unsigned buf_file_start;
+
+    // deformed-shell recovery state (see repair.cpp)
+    bool recovery_used;          // tolerant decoder produced this header
+    bool magic_restored;         // "UPX!" magic was fuzzy-reconstructed
+    bool checksum_byte_rebuilt;  // header checksum byte was recomputed
+    bool byte_reconstructed;     // a field byte was solved via checksum eq.
+    int reconstructed_pos;       // header byte position that was solved
+    bool checksums_authentic;    // adler fields can be trusted for verification
+    unsigned header_file_offset; // absolute "UPX!" candidate offset
+
+    // alternate checksum-valid header hypotheses discovered during tolerant
+    // decoding; the decompression stage uses the Adler-32 oracles to select one
+    static constexpr int REPAIR_MAX_ALT = 48;
+    int repair_alt_count;
+    byte repair_alt_raw[REPAIR_MAX_ALT][32];
+    int repair_alt_size[REPAIR_MAX_ALT];
+
+    // strictly decode a header whose first bytes are the magic candidate
+    // (original UPX semantics; throws specific errors on invalid headers)
+    void decodeStrictAt(SPAN_S(const byte) p, int blen);
+    // re-decode one stored alternate, preserving scan placement fields
+    bool loadRepairAlt(int idx);
 
     // info fields set by Packer::compress()
     upx_compress_result_t compress_result;

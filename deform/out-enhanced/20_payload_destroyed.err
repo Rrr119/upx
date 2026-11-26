@@ -1,0 +1,1 @@
+upx: deform/samples/20_payload_destroyed.exe: CantUnpackException: compressed-stream checksum mismatch: header c_adler=09716e6c but computed cf516f0d over 77414 compressed bytes -- the compressed data is corrupted or truncated (not just a damaged header)

@@ -53,6 +53,7 @@ enum {
     CMD_HELP,
     CMD_LICENSE,
     CMD_VERSION,
+    CMD_DIAGNOSE, // tolerant UPX shell diagnosis / repair report
 };
 
 forceinline constexpr bool opt_is_compress(int cmd) noexcept {
@@ -89,6 +90,11 @@ struct Options final {
     bool ignorewarn;
     bool no_env;
     bool no_progress;
+
+    // deformed-shell tolerant recognition / header repair (see repair.cpp)
+    bool repair_enabled;  // --repair / --no-repair; default: on for unpack/test/list
+    int repair_verbosity; // 0: quiet, 1: report repairs, 2: full candidate trace
+    bool diagnose_only;   // --diagnose
     const char *output_name;
     bool preserve_link;
     bool preserve_mode;

@@ -1,0 +1,2 @@
+upx: deform/samples/15_both_adlers_multibyte.exe: recovery [checksum-rebuilt]: header checksum byte recomputed; Adler fields treated as untrusted until decompression confirms them
+upx: deform/samples/15_both_adlers_multibyte.exe: recovery [cadler-unverified]: c_adler mismatch (09716e6c != header 09716e4e) and no header hypothesis matches; treating Adler fields as damaged, continuing without checksum gate

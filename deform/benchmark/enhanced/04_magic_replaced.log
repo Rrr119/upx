@@ -1,0 +1,12 @@
+                       Ultimate Packer for eXecutables
+                          Copyright (C) 1996 - 2026
+UPX git-75c1f8+ Markus Oberhumer, Laszlo Molnar & John Reiser   Oct 29th 2026
+
+        File size         Ratio      Format      Name
+   --------------------   ------   -----------   -----------
+    302592 <-    113664   37.56%    win32/pe     04_magic_replaced.exe
+
+Unpacked 1 file.
+
+WARNING: this is an unstable beta version - use for testing only! Really.
+upx: /home/dev/feedback/uid38857/deform/samples/04_magic_replaced.exe: recovery [magic-fuzzy]: UPX magic located by fuzzy scan at window offset 0x20 (hamming distance 3)

@@ -57,6 +57,12 @@ void Options::reset() noexcept {
     o->preserve_timestamp = true;
     o->verbose = 2;
 
+    // tolerant handling of deformed / header-damaged UPX shells;
+    // still possible to disable via --no-repair for strict behaviour
+    o->repair_enabled = true;
+    o->repair_verbosity = 1;
+    o->diagnose_only = false;
+
     o->console = CON_FILE;
 #if (ACC_OS_DOS32) && defined(__DJGPP__)
     o->console = CON_INIT;

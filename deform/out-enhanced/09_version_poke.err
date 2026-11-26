@@ -1,0 +1,1 @@
+upx: deform/samples/09_version_poke.exe: recovery [checksum-rebuilt]: header checksum byte recomputed; Adler fields treated as untrusted until decompression confirms them

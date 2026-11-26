@@ -326,6 +326,15 @@ void show_help(int verbose) {
                     "  --overlay=skip      don't compress a file with an overlay\n"
                     "\n");
         fg = con_fg(f, FG_YELLOW);
+        con_fprintf(f, "Deformed UPX shells / damaged headers:\n");
+        fg = con_fg(f, fg);
+        con_fprintf(f,
+                    "  --diagnose          locate UPX header candidates and print specific\n"
+                    "                      failure/repair reasons without writing output\n"
+                    "  --repair            tolerant magic/header repair on unpack [default]\n"
+                    "  --no-repair         strict legacy behaviour, disable recovery\n"
+                    "\n");
+        fg = con_fg(f, FG_YELLOW);
         con_fprintf(f, "File system options:\n");
         fg = con_fg(f, fg);
         con_fprintf(f,

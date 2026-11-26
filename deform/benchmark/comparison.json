@@ -1,0 +1,373 @@
+{
+  "total": 20,
+  "expected_unpacked_sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+  "baseline_binary": "/home/dev/feedback/uid38857/deform/upx-baseline",
+  "enhanced_binary": "/home/dev/feedback/uid38857/build-enhanced/upx",
+  "baseline_success": 0,
+  "enhanced_success": 19,
+  "baseline_rate": "0/20 (0%)",
+  "enhanced_rate": "19/20 (95%)",
+  "rows": [
+    {
+      "id": "01",
+      "mutation": "magic_bitflip",
+      "category": "magic",
+      "description": "one bit flipped in UPX! last byte",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "02",
+      "mutation": "magic_lowercase",
+      "category": "magic",
+      "description": "UPX! XOR 0x20 -> upx!",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "03",
+      "mutation": "magic_zeroed",
+      "category": "magic",
+      "description": "all four magic bytes zeroed",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "04",
+      "mutation": "magic_replaced",
+      "category": "magic",
+      "description": "magic replaced with YTS!",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "05",
+      "mutation": "magic_xor_encoded",
+      "category": "magic",
+      "description": "magic XOR-encoded with key 0x5A",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "06",
+      "mutation": "hdr_checksum_zero",
+      "category": "header-checksum",
+      "description": "header checksum byte set to 0",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "07",
+      "mutation": "hdr_checksum_ff",
+      "category": "header-checksum",
+      "description": "header checksum byte set to 0xFF",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "08",
+      "mutation": "level_junk_bit",
+      "category": "header-field",
+      "description": "ignored level bit set; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "09",
+      "mutation": "version_poke",
+      "category": "header-field",
+      "description": "version byte 13 -> 12; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "10",
+      "mutation": "format_poke",
+      "category": "header-field",
+      "description": "format byte -> 42 invalid; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "unknown format 70"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "11",
+      "mutation": "method_poke",
+      "category": "header-field",
+      "description": "method byte -> 0xFF invalid; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "12",
+      "mutation": "uadler_byte",
+      "category": "header-field",
+      "description": "u_adler corrupted; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "13",
+      "mutation": "cadler_byte",
+      "category": "header-field",
+      "description": "c_adler corrupted; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "14",
+      "mutation": "ulen_byte",
+      "category": "header-field",
+      "description": "u_len byte corrupted; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "15",
+      "mutation": "both_adlers_multibyte",
+      "category": "header-field",
+      "description": "two Adler fields damaged; stale checksum",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "header corrupted 3"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "16",
+      "mutation": "rename_upx0",
+      "category": "section-name",
+      "description": "PE section UPX0 renamed",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "17",
+      "mutation": "rename_all_sections",
+      "category": "section-name",
+      "description": "UPX0/UPX1/.rsrc renamed",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "18",
+      "mutation": "rename_and_magic",
+      "category": "combined",
+      "description": "sections renamed plus 2 magic bits flipped",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "19",
+      "mutation": "section_names_zeroed",
+      "category": "section-name",
+      "description": "all PE section names zeroed",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "file is modified/hacked/protected; take care!!!"
+      },
+      "enhanced": {
+        "success": true,
+        "rc": 0,
+        "sha256": "236166bbe2d8450b940b6beec25759f305e8d95af49125e923196014b63870ca",
+        "reason": ""
+      }
+    },
+    {
+      "id": "20",
+      "mutation": "payload_destroyed",
+      "category": "negative-control",
+      "description": "compressed stream byte flipped (unrepairable)",
+      "baseline": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "upx-baseline: /home/dev/feedback/uid38857/deform/samples/20_payload_destroyed.exe: Exception: checksum error"
+      },
+      "enhanced": {
+        "success": false,
+        "rc": 1,
+        "sha256": null,
+        "reason": "compressed-stream checksum mismatch: header c_adler=09716e6c but computed cf516f0d over 77414 compressed bytes -- the compressed data is corrupted or truncated (not just a damaged header)",
+        "diagnose": "Ultimate Packer for eXecutables\n                          Copyright (C) 1996 - 2026\nUPX git-75c1f8+ Markus Oberhumer, Laszlo Molnar & John Reiser   Oct 29th 2026\n\n        File size         Ratio      Format      Name\n   --------------------   ------   -----------   -----------\nUPX deformation diagnosis for: /home/dev/feedback/uid38857/deform/samples/20_payload_destroyed.exe\n  file size      : 113664 bytes\n  executable type: PE PE32 (3 sections)\n    section[0] name='UPX0....' vaddr=0x001000 rawptr=0x000400 rawsize=0\n    section[1] name='UPX1....' vaddr=0x03c000 rawptr=0x000400 rawsize=0x13200\n    section[2] name='.rsrc...' vaddr=0x050000 rawptr=0x013600 rawsize=0x8600\n  exact 'UPX!' headers found: 1\n  structural/fuzzy candidates : 24\n\n  candidate #1 at file offset 0x3e0 (score=200, header_size=32)\n    magic bytes   : 55 50 58 21 ('UPX!'), hamming-distance=0\n    version=13 format=9 (win32/pe-i386) method=8 level=8\n    u_len=314777 c_len=77414 u_file_size=302592\n    hdr checksum  : stored=0x0a computed=0x0a -> VALID\n    payload c_adler: header=09716e6c actual=cf516f0d -> MISMATCH (at file offset 0x400)\n    SPECIFIC FAILURE: authentic header checksum proves c_adler field is original; mismatch means the compressed stream (77414 bytes at 0x400) is corrupted/truncated, not merely the header.\n\n  candidate #2 at file offset 0xa9 (score=115, header_size=32)\n    magic bytes   : 57 6f ea 93 ('Wo..'), hamming-distance=4\n    version=47 format=252 (unknown/other) method=234 level=3\n    hdr checksum  : stored=0x52 computed=0x52 -> VALID\n    repair action : restore magic constant to 'UPX!'\n\n  candidate #3 at file offset 0x4d7 (score=105, header_size=32)\n    magic bytes   : d0 e6 fc 08 ('....'), hamming-distance=4\n    version=51 format=158 (unknown/other) method=231 level=9\n    hdr checksum  : stored=0x10 computed=0x10 -> VALID\n    repair action : restore magic constant to 'UPX!'\n\n  candidate #4 at file offset 0x481 (score=100, header_size=32)\n    magic bytes   : cf f3 3c ef ('..<.'), hamming-distance=4\n    version=14 format=46 (unknown/other) method=6 level=8\n    u_len=1592188098 c_len=1009783036 u_file_size=2114909135\n    hdr checksum  : stored=0x6c computed=0x78 -> MISMATCH\n    repair action : restore magic constant to 'UPX!'\n    repair action : recompute header checksum byte to 0x78\n    repair option : checksum equation reconstructs header byte[5] (format) as 34 (original stored checksum stays authentic)\n\n  candidate #5 at file offset 0x3e2 (score=90, header_size=28)\n    magic bytes   : 58 21 0d 09 ('X!..'), hamming-distance=4\n    version=8 format=8 (unknown/other) method=7 level=5\n    u_len=778436612 c_len=2650800129 u_file_size=187039748\n    hdr checksum  : stored=0x0b computed=0xe4 -> MISMATCH\n    repair action : restore magic constant to 'UPX!'\n    repair action : recompute header checksum byte to 0xe4\n    repair option : checksum equation reconstructs header byte[4] (version) as 42 (original stored checksum stays authentic)\n\n  VERDICT: UPX shell detected but a specific unrecoverable condition was found; see SPECIFIC FAILURE above.\n\nWARNING: this is an unstable beta version - use for testing only! Really."
+      }
+    }
+  ]
+}
